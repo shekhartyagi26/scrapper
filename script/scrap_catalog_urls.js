@@ -64,4 +64,55 @@ const scrap = () => new Promise((resolve, reject) => {
     }
 });
 
-scrap();
+
+function checkValidUrl($elemen) {
+    if ($elemen.includes('https')) {
+        var urlt = $elemen;
+    } else {
+        var add = "https://www.homedepot.com";
+        var urlsv = add.concat($elemen);
+        var urlt = urlsv;
+    }
+    return urlt;
+}
+
+const scrapSiteMapUrls = () => new Promise((resolve, reject) => {
+    console.log("---------------------------------------------------------------------Start Checking For site map Catalog Urls");
+
+    var siteMapUrls = [];
+    var url = 'https://www.homedepot.com/c/site_map';
+    request(url, function(err, resp, body) {
+        if (err) throw err;
+        const $ = cheerio.load(body);
+        $("#container > div > div > div  > div > div > p > a").each(function(i, element) {
+            const $element = $(element).attr("href");
+            var urld = checkValidUrl($element);
+            if (urld.includes('https://www.homedepot.com/b/')) {
+                siteMapUrls.push({ url: urld, website: "homedepot" })
+            }
+        });
+        if (siteMapUrls.length != 0) {
+            siteMapUrls.map(async (data) => {
+                let record = await conn_catalog_urls.findOne({ url: data.url, website: data.website });
+                if (!record) await conn_catalog_urls.create(data)
+                return;
+            });
+            console.log("all site map data processed suceesfully");
+            resolve()
+        } else {
+            console.log("No url found");
+            resolve();
+        }
+
+    });
+
+
+
+})
+
+const start = async () => {
+    await scrapSiteMapUrls();
+    await scrap();
+}
+
+start();
