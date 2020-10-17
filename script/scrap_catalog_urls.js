@@ -1,0 +1,67 @@
+var cheerio = require('cheerio');
+var request = require('request');
+const async = require("async");
+var mongoose = require('mongoose')
+
+//*******************************************************************************************************
+//*******************************************************************************************************
+let dbUrl = 'mongodb://127.0.0.1/estimater';
+
+var conn_pg_catalog_urls = mongoose.createConnection(dbUrl, { useUnifiedTopology: true, useNewUrlParser: true });
+var schema_catalog_urls = mongoose.Schema({}, {
+    strict: false,
+    collection: 'catalog_urls'
+});
+var conn_catalog_urls = conn_pg_catalog_urls.model('catalog_urls', schema_catalog_urls);
+
+//*******************************************************************************************************
+
+let allUrls = [];
+const scrap = () => new Promise((resolve, reject) => {
+    var urls = ["https://www.homedepot.com/b/Home-Decor-Home-Accents/N-5yc1vZar58",
+        "https://www.homedepot.com/b/Home-Decor-Bedding-Bath/N-5yc1vZci04",
+        //"https://www.homedepot.com/b/Home-Decor-Wall-Decor/N-5yc1vZar8x",
+        //"https://www.homedepot.com/b/Lighting/N-5yc1vZbvn5",
+        //"https://www.homedepot.com/b/Flooring-Rugs-Area-Rugs/N-5yc1vZarjg",
+        "https://www.homedepot.com/b/Window-Treatments/N-5yc1vZar4w",
+        "https://www.homedepot.com/b/Kitchen-Kitchenware/N-5yc1vZaqzo",
+        "https://www.homedepot.com/b/Kitchen-Tableware-Bar/N-5yc1vZc4c1",
+        "https://www.homedepot.com/b/Kitchen-Kitchen-Storage-Organization/N-5yc1vZapu6",
+        "https://www.homedepot.com/b/Appliances-Small-Kitchen-Appliances/N-5yc1vZbv48"
+    ];
+    async.eachSeries(urls, processUrl, function(err) {
+        if (err) console.log("Something went wrong");
+        else {
+
+            allUrls.map(async (data) => {
+                let record = await conn_catalog_urls.findOne({ url: data.url, website: data.website });
+                if (!record) await conn_catalog_urls.create(data)
+                return;
+            })
+            console.log("process completed suceesfully");
+        }
+    });
+
+    function processUrl(url, callback) {
+        request(url, function(err, resp, body) {
+            if (err) callback(err);
+            const $ = cheerio.load(body);
+            $("#ColumnRail_thd_20cf > div > div > nav > ul > li > a").each(function(i, element) {
+                const sul = $(element).attr('href');
+                const tex = $(element).text();
+                if (tex != 'Shop All') {
+                    if (sul.includes('https')) {
+                        allUrls.push({ url: sul, website: "homedepot" });
+                    } else {
+                        var add = "https://www.homedepot.com";
+                        var urlsv = add.concat(sul);
+                        allUrls.push({ url: urlsv, website: "homedepot" });
+                    };
+                };
+            });
+            callback();
+        });
+    }
+});
+
+scrap();
