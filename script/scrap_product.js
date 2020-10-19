@@ -20,7 +20,8 @@ const insertProduct = (products, conn_catalog_product, conn_catalog_urls) => new
 
     }
     console.log("------------------------ products inserted succesfully -------------------------------");
-})
+});
+
 const fetchProduct = ({ url: href }, conn_catalog_product, conn_catalog_urls) => new Promise(async (resolve, reject) => {
     console.log("---------------- Url is processing  :: " + href);
     try {

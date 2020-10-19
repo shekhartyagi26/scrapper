@@ -16,8 +16,30 @@ var conn_catalog_urls = conn_pg_catalog_urls.model('catalog_urls', schema_catalo
 
 //*******************************************************************************************************
 
+
+const insertProduct = (allUrls) => new Promise((resolve, reject) => {
+    console.log("-------------------------------Insert products in the db -------------------------------");
+    try {
+        allUrls.map(async (data) => {
+            let record = await conn_catalog_urls.findOne({ url: data.url, website: data.website });
+            if (!record) await conn_catalog_urls.create(data)
+            return;
+        })
+        resolve();
+    } catch (err) {
+        console.log(err)
+        resolve(err);
+
+    }
+    console.log("-------------------------------products inserted succesfully-------------------------------");
+});
+
+
+
+
 let allUrls = [];
-const scrap = () => new Promise((resolve, reject) => {
+const scrap = () => new Promise(async (resolve, reject) => {
+    console.log("-------------------------------Scrap homedepot data-------------------------------");
     var urls = ["https://www.homedepot.com/b/Home-Decor-Home-Accents/N-5yc1vZar58",
         "https://www.homedepot.com/b/Home-Decor-Bedding-Bath/N-5yc1vZci04",
         //"https://www.homedepot.com/b/Home-Decor-Wall-Decor/N-5yc1vZar8x",
@@ -29,16 +51,12 @@ const scrap = () => new Promise((resolve, reject) => {
         "https://www.homedepot.com/b/Kitchen-Kitchen-Storage-Organization/N-5yc1vZapu6",
         "https://www.homedepot.com/b/Appliances-Small-Kitchen-Appliances/N-5yc1vZbv48"
     ];
-    async.eachSeries(urls, processUrl, function(err) {
+    async.eachSeries(urls, processUrl, async function(err) {
         if (err) console.log("Something went wrong");
         else {
-
-            allUrls.map(async (data) => {
-                let record = await conn_catalog_urls.findOne({ url: data.url, website: data.website });
-                if (!record) await conn_catalog_urls.create(data)
-                return;
-            })
-            console.log("process completed suceesfully");
+            await insertProduct(allUrls);
+            console.log("-------------------------------Scrap homedepot data suceesfully-------------------------------");
+            resolve();
         }
     });
 
@@ -76,12 +94,12 @@ function checkValidUrl($elemen) {
     return urlt;
 }
 
-const scrapSiteMapUrls = () => new Promise((resolve, reject) => {
-    console.log("---------------------------------------------------------------------Start Checking For site map Catalog Urls");
+const scrapSiteMapUrls = () => new Promise(async (resolve, reject) => {
+    console.log("-------------------------------Start Checking For site map Catalog Urls-------------------------------");
 
     var siteMapUrls = [];
     var url = 'https://www.homedepot.com/c/site_map';
-    request(url, function(err, resp, body) {
+    request(url, async function(err, resp, body) {
         if (err) throw err;
         const $ = cheerio.load(body);
         $("#container > div > div > div  > div > div > p > a").each(function(i, element) {
@@ -92,12 +110,8 @@ const scrapSiteMapUrls = () => new Promise((resolve, reject) => {
             }
         });
         if (siteMapUrls.length != 0) {
-            siteMapUrls.map(async (data) => {
-                let record = await conn_catalog_urls.findOne({ url: data.url, website: data.website });
-                if (!record) await conn_catalog_urls.create(data)
-                return;
-            });
-            console.log("all site map data processed suceesfully");
+            await insertProduct(siteMapUrls);
+            console.log("-------------------------------all site map data processed suceesfully-------------------------------");
             resolve()
         } else {
             console.log("No url found");
@@ -105,14 +119,15 @@ const scrapSiteMapUrls = () => new Promise((resolve, reject) => {
         }
 
     });
+});
 
-
-
-})
 
 const start = async () => {
+    console.log("-------------------------------Going to fetch catalog urls-------------------------------");
     await scrapSiteMapUrls();
     await scrap();
+    console.log("-------------------------------All urls fetched suceesfully-------------------------------");
+    start();
 }
 
 start();
