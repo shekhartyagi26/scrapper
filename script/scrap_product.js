@@ -111,7 +111,7 @@ const scrapHomeDepotProduct = ({ url: href }, website, conn_catalog_product, con
             var pagesToScrape = 1;
         }
 
-        const browser = await puppeteer.launch({ headless: true });
+        const browser = await puppeteer.launch({  ignoreDefaultArgs: ['--disable-extensions'] });
         const page = await browser.newPage();
         var urls = [];
         await page.goto(href, { waitUntil: 'load', timeout: 0 });
