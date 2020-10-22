@@ -6,6 +6,7 @@ const mongoose = require("mongoose");
 const insertProduct = (products, conn_catalog_product, conn_catalog_urls) => new Promise((resolve, reject) => {
     console.log("------------------------ Insert products in the db -------------------------------");
     try {
+        console.log(`-------------------------------Total products found ${products.length} -------------------------------`);
         products.map(async (product) => {
             if (product.productId) {
                 let record = await conn_catalog_product.findOne({ productId: product.productId });
@@ -22,8 +23,89 @@ const insertProduct = (products, conn_catalog_product, conn_catalog_urls) => new
     console.log("------------------------ products inserted succesfully -------------------------------");
 });
 
-const fetchProduct = ({ url: href }, conn_catalog_product, conn_catalog_urls) => new Promise(async (resolve, reject) => {
-    console.log("---------------- Url is processing  :: " + href);
+const scrapFergusonProduct = ({ url: href }, website, conn_catalog_product, conn_catalog_urls) => new Promise(async (resolve, reject) => {
+    console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url  :: " + href);
+    try {
+        if (!pagesToScrape) {
+            var pagesToScrape = 1;
+        }
+        const browser = await puppeteer.launch({ headless: false });
+        const page = await browser.newPage();
+        var products = [];
+        await page.goto(href, { waitUntil: 'load', timeout: 0, visible: true });
+        await page.waitForTimeout(5000);
+        let currentPage = 1;
+
+        console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url Response");
+        await Promise.all([
+            await page.waitForSelector('div.select > span > span > select', { waitUntil: 'load' }),
+            await page.click(' div.select > span > span > select'),
+            await page.waitForTimeout(1000),
+            await page.hover('div.select > span > span > div > div.sim-list > div > ul > div > li:last-child'),
+            await page.click('div.select > span > span > div > div.sim-list > div > ul > div > li:last-child'),
+            await page.waitForTimeout(10000)
+        ]);
+        while (currentPage <= pagesToScrape) {
+            var results = [];
+            const url = await scrap();
+
+            function scrap() {
+                var promise = new Promise(async (resolve, reject) => {
+                    const content = await page.content()
+                    const $ = cheerio.load(content)
+                    pagesToScrape = $("#wrapper > main > div > div > div > div> div > div > div > div.rc-fg-page-select>span.pages").text().slice(-3).trim();
+                    if (pagesToScrape) {
+                        const srct = $("#wrapper > main> div > div > div > div> div >div.fg-search-results-box> ul>li>div");
+                        srct.each(function(i, element) {
+                            const rank = $(this).find('a').attr('href');
+                            const rank1 = $(this).find('a  img').attr('src');
+                            const rank2 = $(this).find('div.sr-content-box > a > p').text();
+                            const rank3 = $(this).find('div>div.money>p>span').text().replace(/\s+/, "").replace(/\n/g, "").trim();
+                            const rank4 = $(this).find('.product-pod--padding > div > a > div > span').text() || $(this).find('div>a:nth-child(2)').text();
+                            const rank7 = $(this).find('.product-pod--padding > div.product-pod__title > p > span').text() || $(this).find('a > div > h2 > span:nth-child(1)').text() || $(this).find(' div> a> span.pod-plp__brand-name').text();
+                            const productId = $(this).find('div.sr-content-box> p>a').text().replace("Part #:", "").trim();
+                            results.push({
+                                descrip: rank2,
+                                href: rank,
+                                src: rank1,
+                                price: rank3,
+                                rating: rank4,
+                                brand: rank7,
+                                productId
+                            });
+                        });
+                    }
+                    resolve(results);
+                });
+                return promise;
+            };
+            products = products.concat(url);
+            console.log(products.length);
+
+            console.log("page scrapped:" + currentPage + "/" + pagesToScrape);
+            if (currentPage <= pagesToScrape) {
+                await Promise.all([
+                    await page.waitForSelector("#wrapper > main > div > div > div > div > div > div> div > div.rc-fg-page-select > a", { waitUntil: 'load' }),
+                    await page.click("#wrapper > main > div > div > div > div > div > div> div > div.rc-fg-page-select > a:last-child"),
+                    await page.waitForTimeout(10000),
+                ]);
+            } else {
+                console.log(products.length);
+            }
+            currentPage++;
+        }
+        await browser.close();
+        console.log("-------------", products.length)
+        await insertProduct(products, conn_catalog_product, conn_catalog_urls);
+        resolve()
+    } catch (err) {
+        console.log("---------------------------------------------------------------------ERROR OCCURS", err);
+        scrapFergusonProduct({ url: href }, website, conn_catalog_product, conn_catalog_urls)
+    }
+})
+
+const scrapHomeDepotProduct = ({ url: href }, website, conn_catalog_product, conn_catalog_urls) => new Promise(async (resolve, reject) => {
+    console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url  :: " + href);
     try {
         if (!pagesToScrape) {
             var pagesToScrape = 1;
@@ -120,7 +202,6 @@ const fetchProduct = ({ url: href }, conn_catalog_product, conn_catalog_urls) =>
                     pagesToScrape++,
                 ]);
             } else {
-                // console.dir(urls, { 'maxArrayLength': null })
                 console.log(urls.length);
             }
             currentPage++;
@@ -133,8 +214,7 @@ const fetchProduct = ({ url: href }, conn_catalog_product, conn_catalog_urls) =>
         console.log("---------------------------------------------------------------------ERROR OCCURS", err);
         reject(err)
     }
-});
-
+})
 
 
 const createConnection = () => new Promise((resolve, reject) => {
@@ -170,7 +250,9 @@ const callFetchProduct = (catalog_url_data, website, conn_catalog_product, conn_
     var currentUrl = pendingUrls.splice(-1);
     try {
 
-        await fetchProduct(currentUrl[0], conn_catalog_product, conn_catalog_urls)
+        if (website == "homedepot") await scrapHomeDepotProduct(currentUrl[0], website, conn_catalog_product, conn_catalog_urls);
+        else if (website == "ferguson") await scrapFergusonProduct(currentUrl[0], website, conn_catalog_product, conn_catalog_urls);
+
         if (pendingUrls.length > 0) {
             callFetchProduct(pendingUrls, website, conn_catalog_product, conn_catalog_urls);
         } else {
@@ -201,9 +283,8 @@ const start = (website) => new Promise(async (resolve, reject) => {
 });
 
 
-
 //*******************************************************************************************************
-var master_website_list = ['homedepot'];
+var master_website_list = ['homedepot', 'ferguson'];
 var MASTER_WEBSITE = false;
 var args = process.argv.slice(2);
 if (args.length == 0) {

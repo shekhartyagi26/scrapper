@@ -18,8 +18,9 @@ var conn_catalog_urls = conn_pg_catalog_urls.model('catalog_urls', schema_catalo
 
 
 const insertProduct = (allUrls) => new Promise((resolve, reject) => {
-    console.log("-------------------------------Insert products in the db -------------------------------");
+    console.log("-------------------------------Insert URLs in the db -------------------------------");
     try {
+        console.log(`-------------------------------Total URLs found ${allUrls.length} -------------------------------`);
         allUrls.map(async (data) => {
             let record = await conn_catalog_urls.findOne({ url: data.url, website: data.website });
             if (!record) await conn_catalog_urls.create(data)
@@ -31,14 +32,14 @@ const insertProduct = (allUrls) => new Promise((resolve, reject) => {
         resolve(err);
 
     }
-    console.log("-------------------------------products inserted succesfully-------------------------------");
+    console.log("-------------------------------URLs inserted succesfully-------------------------------");
 });
 
 
 
 
 let allUrls = [];
-const scrap = () => new Promise(async (resolve, reject) => {
+const scrapHomeDepot = () => new Promise(async (resolve, reject) => {
     console.log("-------------------------------Scrap homedepot data-------------------------------");
     var urls = ["https://www.homedepot.com/b/Home-Decor-Home-Accents/N-5yc1vZar58",
         "https://www.homedepot.com/b/Home-Decor-Bedding-Bath/N-5yc1vZci04",
@@ -83,32 +84,37 @@ const scrap = () => new Promise(async (resolve, reject) => {
 });
 
 
-function checkValidUrl($elemen) {
+function checkValidUrl($elemen, website) {
     if ($elemen.includes('https')) {
         var urlt = $elemen;
     } else {
-        var add = "https://www.homedepot.com";
+        var add = website == "homedepot" ? "https://www.homedepot.com" : "https://www.ferguson.com";
         var urlsv = add.concat($elemen);
         var urlt = urlsv;
     }
     return urlt;
 }
 
-const scrapSiteMapUrls = () => new Promise(async (resolve, reject) => {
+const scrapSiteMapUrls = (website, url, selector) => new Promise(async (resolve, reject) => {
     console.log("-------------------------------Start Checking For site map Catalog Urls-------------------------------");
-
     var siteMapUrls = [];
-    var url = 'https://www.homedepot.com/c/site_map';
     request(url, async function(err, resp, body) {
         if (err) throw err;
         const $ = cheerio.load(body);
-        $("#container > div > div > div  > div > div > p > a").each(function(i, element) {
-            const $element = $(element).attr("href");
-            var urld = checkValidUrl($element);
-            if (urld.includes('https://www.homedepot.com/b/')) {
-                siteMapUrls.push({ url: urld, website: "homedepot" })
+        $(selector).each(function(i, element) {
+            if (website == "homedepot") {
+                const $element = $(element).attr("href");
+                var urld = checkValidUrl($element);
+                if (urld.includes('https://www.homedepot.com/b/')) {
+                    siteMapUrls.push({ url: urld, website })
+                }
+            } else {
+                const $element = $(element).attr('data-url');
+                var urld = checkValidUrl($element);
+                siteMapUrls.push({ url: urld, website })
             }
         });
+        console.log(`-------------------------------total urls found ${siteMapUrls.length}-------------------------------`);
         if (siteMapUrls.length != 0) {
             await insertProduct(siteMapUrls);
             console.log("-------------------------------all site map data processed suceesfully-------------------------------");
@@ -117,17 +123,46 @@ const scrapSiteMapUrls = () => new Promise(async (resolve, reject) => {
             console.log("No url found");
             resolve();
         }
-
     });
 });
 
 
-const start = async () => {
+const start = async (website) => {
+    if (website == "homedepot") {
+        url = 'https://www.homedepot.com/c/site_map';
+        selector = "#container > div > div > div  > div > div > p > a"
+    } else {
+        url = "https://www.ferguson.com/category?icid=mrch_fly_prod_all-products";
+        selector = "#wrapper > main > div > div > div > div > div:nth-child(1) > div> ul > li";
+    }
+
     console.log("-------------------------------Going to fetch catalog urls-------------------------------");
-    await scrapSiteMapUrls();
-    await scrap();
+    if (website == "homedepot") await scrapHomeDepot(website);
+    await scrapSiteMapUrls(website, url, selector);
     console.log("-------------------------------All urls fetched suceesfully-------------------------------");
     start();
 }
 
-start();
+
+
+//*******************************************************************************************************
+var master_website_list = ['homedepot', "ferguson"];
+var MASTER_WEBSITE = false;
+var args = process.argv.slice(2);
+if (args.length == 0) {
+    console.log('Please pass a master website to start. So DIE!!!');
+    process.exit(0);
+} else {
+    arg_website = args[0];
+    if (master_website_list.includes(arg_website)) {
+
+        MASTER_WEBSITE = arg_website;
+        start(MASTER_WEBSITE);
+        //console.log( arg_website + " :: is a valid master website" );
+    } else {
+        console.log(arg_website + " :: is not a valid master website. So DIE!!!");
+        process.exit(0);
+    }
+}
+console.log('Master Website :: ' + MASTER_WEBSITE);
+//*******************************************************************************************************
