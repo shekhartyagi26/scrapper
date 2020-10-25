@@ -112,7 +112,7 @@ const scrapHomeDepotProduct = ({ url: href }, website, conn_catalog_product, con
         }
 
         const browser = await puppeteer.launch({
-            headless: false,
+            // headless: false,
             args: ["--no-sandbox"],
             executablePath: '/usr/bin/google-chrome-stable'
         });
