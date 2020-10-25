@@ -29,7 +29,7 @@ const scrapFergusonProduct = ({ url: href }, website, conn_catalog_product, conn
         if (!pagesToScrape) {
             var pagesToScrape = 1;
         }
-        const browser = await puppeteer.launch({ headless: false });
+        const browser = await puppeteer.launch({  ignoreDefaultArgs: ['--disable-extensions'], executablePath: '/usr/bin/google-chrome-stable' /*headless: false*/ });
         const page = await browser.newPage();
         var products = [];
         await page.goto(href, { waitUntil: 'load', timeout: 0, visible: true });
@@ -111,7 +111,11 @@ const scrapHomeDepotProduct = ({ url: href }, website, conn_catalog_product, con
             var pagesToScrape = 1;
         }
 
-        const browser = await puppeteer.launch({  ignoreDefaultArgs: ['--disable-extensions'] });
+        const browser = await puppeteer.launch({
+            headless: false,
+            args: ["--no-sandbox"],
+            executablePath: '/usr/bin/google-chrome-stable'
+        });
         const page = await browser.newPage();
         var urls = [];
         await page.goto(href, { waitUntil: 'load', timeout: 0 });
