@@ -127,6 +127,92 @@ const scrapSiteMapUrls = (website, url, selector) => new Promise(async (resolve,
 });
 
 
+const scrapLowesUrls = (website) => new Promise((resolve, reject) => {
+    const add = "https://www.lowes.com";
+    let allUrls = [];
+    let curls = [];
+    let allcUrls = [];
+    const urls = ["https://www.lowes.com/c/Departments"]
+    async.eachSeries(urls, processUrl, function(err) {
+        if (err) console.log("Something went wrong");
+        else {
+
+            allUrls.map(async (data) => {
+                let record = await conn_catalog_urls.findOne({ url: data.url, website: data.website });
+                if (!record) await conn_catalog_urls.create(data)
+                return;
+            })
+            async.eachSeries(curls, processcUrl, function(err) {
+                if (err) console.log("Something went wrong");
+                else {
+
+                    allcUrls.map(async (data) => {
+                        let record = await conn_catalog_urls.findOne({ url: data.url, website: data.website });
+                        if (!record) await conn_catalog_urls.create(data)
+                        return;
+                    })
+
+                    console.log("process completed suceesfully");
+
+                }
+            });
+        }
+    });
+
+    function processUrl(url, callback) {
+        request(url, function(err, resp, body) {
+            if (err) callback(err);
+            var $ = cheerio.load(body);
+            $("#mainContent > div.categorylist > div > div > div > ul>li>h6>a").each(function(i, element) {
+                var sul = $(element).attr('href');
+                //const tex = $(element).text();
+                // if (tex != 'Shop All') {
+                if (!sul.includes('https')) {
+                    suli = add.concat(sul);
+                } else { suli = sul }
+                if (suli.includes('/c/')) {
+                    curls.push(suli);
+                } else { allUrls.push({ url: suli, website: "lowes" }); };
+
+            });
+            callback();
+        });
+
+    };
+
+    function processcUrl(url, callback) {
+        request(url, function(err, resp, body) {
+            if (err) callback(err);
+            const $ = cheerio.load(body);
+            var subsul = $('div.dtmmboxtarget.parbase.section').find('a').attr('href');
+            if (subsul == undefined) {
+                $("#mainContent > div.categorylist > div > div> div > h6 > a").each(function(i, element) {
+                    subsul = $(element).attr('href')
+                    if (!subsul.includes('https')) {
+                        subsule = add.concat(subsul);
+                        allcUrls.push({ url: subsule, website: "lowes" });
+                    } else {
+                        allcUrls.push({ url: subsul, website: "lowes" });
+                    }
+                });
+            } else {
+                if (!subsul.includes('https')) {
+                    subsule = add.concat(subsul);
+                    allcUrls.push({ url: subsule, website: "lowes" });
+                } else {
+
+                    allcUrls.push({ url: subsul, website: "lowes" });
+                }
+            }
+            callback();
+        });
+    };
+});
+
+
+
+
+
 const start = async (website) => {
     if (website == "homedepot") {
         url = 'https://www.homedepot.com/c/site_map';
@@ -137,15 +223,23 @@ const start = async (website) => {
     }
 
     console.log("-------------------------------Going to fetch catalog urls-------------------------------");
-    if (website == "homedepot") await scrapHomeDepot(website);
-    await scrapSiteMapUrls(website, url, selector);
+    if (website == "homedepot") {await scrapHomeDepot(website);
+        await scrapSiteMapUrls(website, url, selector);} 
+    if(website=="lowes") await scrapLowesUrls(website);
+    if(website=="ferguson") await scrapSiteMapUrls(website,url,selector);
+   
     console.log("-------------------------------All urls fetched suceesfully-------------------------------");
+
     start(website);
 }
 
 
+
+
+
+
 //*******************************************************************************************************
-var master_website_list = ['homedepot', "ferguson"];
+var master_website_list = ['homedepot', "ferguson","lowes"];
 var MASTER_WEBSITE = false;
 var args = process.argv.slice(2);
 if (args.length == 0) {
@@ -164,4 +258,5 @@ if (args.length == 0) {
     }
 }
 console.log('Master Website :: ' + MASTER_WEBSITE);
+
 //*******************************************************************************************************

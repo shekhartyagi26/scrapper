@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
 var cheerio = require('cheerio');
 const mongoose = require("mongoose");
+const scrollPageToBottom=require('puppeteer-autoscroll-down')
 
 
 const insertProduct = (products, conn_catalog_product, conn_catalog_urls) => new Promise((resolve, reject) => {
@@ -24,47 +25,253 @@ const insertProduct = (products, conn_catalog_product, conn_catalog_urls) => new
 });
 
 const scrapFergusonProduct = ({ url: href }, website, conn_catalog_product, conn_catalog_urls) => new Promise(async (resolve, reject) => {
-    console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url  :: " + href);
-    try {
-        if (!pagesToScrape) {
-            var pagesToScrape = 1;
+    if (!href.includes(website)) { resolve(); } else {
+        console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url  :: " + href);
+        try {
+            if (!pagesToScrape) {
+                var pagesToScrape = 1;
+            }
+
+            const browser = await puppeteer.launch({ headless: true });
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36');
+            var products = [];
+            await page.goto(href, { waitUntil: 'load', timeout: 0 });
+
+
+            await page.waitForTimeout(5000);
+            let currentPage = 1;
+
+            console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url Response");
+            await Promise.all([
+                await page.waitForSelector('div.select > span > span > select', { waitUntil: 'load' }),
+                await page.click(' div.select > span > span > select'),
+                await page.waitForTimeout(1000),
+                await page.hover('div.select > span > span > div > div.sim-list > div > ul > div > li:last-child'),
+                await page.click('div.select > span > span > div > div.sim-list > div > ul > div > li:last-child'),
+                await page.waitForTimeout(10000)
+            ]);
+            while (currentPage <= pagesToScrape) {
+                var results = [];
+                const url = await scrap();
+
+                function scrap() {
+                    var promise = new Promise(async (resolve, reject) => {
+                        const content = await page.content()
+                        const $ = cheerio.load(content)
+                        pagesToScrape = $("#wrapper > main > div > div > div > div> div > div > div > div.rc-fg-page-select>span.pages").text().slice(-3).trim();
+                        if (pagesToScrape) {
+                            const srct = $("#wrapper > main> div > div > div > div> div >div.fg-search-results-box> ul>li>div");
+                            srct.each(function(i, element) {
+                                const rank = $(this).find('a').attr('href');
+                                const rank1 = $(this).find('a  img').attr('src');
+                                const rank2 = $(this).find('div.sr-content-box > a > p').text();
+                                const rank3 = $(this).find('div>div.money>p>span').text().replace(/\s+/, "").replace(/\n/g, "").trim();
+                                const rank4 = $(this).find('.product-pod--padding > div > a > div > span').text() || $(this).find('div>a:nth-child(2)').text();
+                                const rank7 = $(this).find('.product-pod--padding > div.product-pod__title > p > span').text() || $(this).find('a > div > h2 > span:nth-child(1)').text() || $(this).find(' div> a> span.pod-plp__brand-name').text();
+                                const productId = $(this).find('div.sr-content-box> p>a').text().replace("Part #:", "").trim();
+                                results.push({
+                                    descrip: rank2,
+                                    href: rank,
+                                    src: rank1,
+                                    price: rank3,
+                                    rating: rank4,
+                                    brand: rank7,
+                                    productId
+                                });
+                            });
+                        }
+                        resolve(results);
+                    });
+                    return promise;
+                };
+                products = products.concat(url);
+                console.log(products.length);
+
+                console.log("page scrapped:" + currentPage + "/" + pagesToScrape);
+                if (currentPage <= pagesToScrape) {
+                    await Promise.all([
+                        await page.waitForSelector("#wrapper > main > div > div > div > div > div > div> div > div.rc-fg-page-select > a", { waitUntil: 'load' }),
+                        await page.click("#wrapper > main > div > div > div > div > div > div> div > div.rc-fg-page-select > a:last-child"),
+                        await page.waitForTimeout(10000),
+                    ]);
+                } else {
+                    console.log(products.length);
+                }
+                currentPage++;
+            }
+            await browser.close();
+            console.log("-------------", products.length)
+            await insertProduct(products, conn_catalog_product, conn_catalog_urls);
+            resolve()
+        } catch (err) {
+            console.log("---------------------------------------------------------------------ERROR OCCURS", err);
+            scrapFergusonProduct({ url: href }, website, conn_catalog_product, conn_catalog_urls)
         }
-        const browser = await puppeteer.launch({ headless: true });
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36');
-        var products = [];
-        await page.goto(href, { waitUntil: 'load', timeout: 0});
-        await page.waitForTimeout(5000);
-        let currentPage = 1;
+    };
+})
 
-        console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url Response");
-        await Promise.all([
-            await page.waitForSelector('div.select > span > span > select', { waitUntil: 'load' }),
-            await page.click(' div.select > span > span > select'),
-            await page.waitForTimeout(1000),
-            await page.hover('div.select > span > span > div > div.sim-list > div > ul > div > li:last-child'),
-            await page.click('div.select > span > span > div > div.sim-list > div > ul > div > li:last-child'),
-            await page.waitForTimeout(10000)
-        ]);
-        while (currentPage <= pagesToScrape) {
-            var results = [];
-            const url = await scrap();
+const scrapHomeDepotProduct = ({ url: href }, website, conn_catalog_product, conn_catalog_urls) => new Promise(async (resolve, reject) => {
+    if (!href.includes(website)) { resolve(); } else {
+        console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url  :: " + href);
+        try {
+            if (!pagesToScrape) {
+                var pagesToScrape = 1;
+            }
 
-            function scrap() {
-                var promise = new Promise(async (resolve, reject) => {
-                    const content = await page.content()
-                    const $ = cheerio.load(content)
-                    pagesToScrape = $("#wrapper > main > div > div > div > div> div > div > div > div.rc-fg-page-select>span.pages").text().slice(-3).trim();
-                    if (pagesToScrape) {
-                        const srct = $("#wrapper > main> div > div > div > div> div >div.fg-search-results-box> ul>li>div");
+
+            const browser = await puppeteer.launch({ ignoreDefaultArgs: ['--disable-extensions'] });
+
+            const page = await browser.newPage();
+            var urls = [];
+            await page.goto(href, { waitUntil: 'load', timeout: 0 });
+            await page.waitForTimeout(5000);
+            let currentPage = 1;
+            console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url Response");
+
+            while (currentPage <= pagesToScrape) {
+                var results = [];
+                const url = await scrap();
+
+                function scrap() {
+                    var promise = new Promise(async (resolve, reject) => {
+                        const content = await page.content();
+                        const $ = cheerio.load(content);
+                        if ($('#products').length != 0) {
+                            const srct = $('#products > div > div > div');
+                            srct.each(function(i, element) {
+                                const rank = ('https://www.homedepot.com').concat($(this).find('a').attr('href'));
+                                const rank1 = $(this).find('a  img').attr('src');
+                                const rank2 = $(this).find('div.pod-plp__description.js-podclick-analytics  > a').clone().children().remove().end().text().replace(/\s+/, "").replace(/\t/g, "").replace(/\n/g, "").trim();
+                                const rank3 = $(this).find(" .price__wrapper > div > div.if__overflow > div > div.price__numbers").clone().children().remove().end().text().replace(/\s+/, "").replace(/\n/g, "").trim();
+                                const rank5 = $(this).find("div.price__wrapper > div > div.if__overflow> div > div.price__numbers > span:nth-child(2)").text();
+                                const rank6 = ("$").concat(rank3).concat('.').concat(rank5);
+                                const rank4 = $(this).find('.product-pod--padding > div > a > div > span').text() || $(this).find('div>a:nth-child(2)').text();
+                                const rank7 = $(this).find('.product-pod--padding > div.product-pod__title > p > span').text() || $(this).find('a > div > h2 > span:nth-child(1)').text() || $(this).find(' div> a> span.pod-plp__brand-name').text();
+                                const productId = $(this).find('meta[data-prop=productID]').attr("content");
+                                results.push({
+                                    descrip: rank2,
+                                    href: rank,
+                                    src: rank1,
+                                    price: rank6,
+                                    rating: rank4,
+                                    brand: rank7,
+                                    productId
+                                });
+                            });
+                        } else {
+                            const srct = $('.results-wrapped > div > div > div');
+                            srct.each(function(i, element) {
+                                const rank = ('https://www.homedepot.com').concat($(this).find('a').attr('href'));
+                                const rank1 = $(this).find('a  img').attr('src');
+                                const rank2 = $(this).find('.product-pod--padding > div > a > div > h2 > span').text()
+                                const rank3 = $(this).find('#standard-price > div > div > span:nth-child(2)').text() || $(this).find('.product-pod--padding > div.price__wrapper > div > div.price > div > span:nth-child(2)').text() || $(this).find('#was-price > div > div > span:nth-child(2)').text() || ($(this).find('#range-price > div:nth-child(1) > div:nth-child(1) > div > span:nth-child(2)').text()).concat('-').concat($(this).find('#range-price > div:nth-child(1) > div:nth-child(3) > div > span:nth-child(2)').text());
+                                const rank5 = $(this).find('#standard-price > div > div > span:nth-child(3)').text() || $(this).find('.product-pod--padding > div.price__wrapper > div > div.price > div > span:nth-child(3)').text()
+                                const rank6 = ("$").concat(rank3).concat('.').concat(rank5);
+                                const rank4 = $(this).find('.product-pod--padding > div > a > div > span').text() || $(this).find('div>a:nth-child(2)').text();
+                                const rank7 = $(this).find('.product-pod--padding > div.product-pod__title > p > span').text() || $(this).find('a > div > h2 > span:nth-child(1)').text() || $(this).find(' div> a> span.pod-plp__brand-name').text();
+                                const productId = $(this).find('meta[data-prop=productID]').attr("content");
+                                results.push({
+                                    descrip: rank2,
+                                    href: rank,
+                                    src: rank1,
+                                    price: rank6,
+                                    rating: rank4,
+                                    brand: rank7,
+                                    productId
+                                });
+                            });
+                        }
+                        resolve(results);
+                    });
+                    return promise;
+                };
+                urls = urls.concat(url);
+                var pageScrap = [];
+                var sdtc = await page.$$('nav.hd-pagination > ul > li');
+                for (const sdt of sdtc) {
+                    const $value = await sdt.$eval('button,span,a', button => button.innerText);
+                    if (isNaN($value)) {
+                        pageScrap.push(1);
+                    } else { pageScrap.push($value); }
+                };
+                if (pageScrap.length != 0) {
+                    var max = pageScrap.reduce(function(a, b) {
+                        return Math.max(a, b)
+                    });
+                } else {
+                    max = 1;
+                }
+                console.log("page scrapped:" + currentPage + "/" + max);
+                if (currentPage < max) {
+                    await Promise.all([await page.waitForSelector('nav.hd-pagination > ul > li:last-child > a,button', { waitUntil: 'load' }),
+                        await page.click("nav.hd-pagination > ul > li:last-child"),
+                        await page.waitForTimeout(10000),
+                        pagesToScrape++,
+                    ]);
+                } else {
+                    console.log(urls.length);
+                }
+                currentPage++;
+            }
+            await browser.close();
+            await insertProduct(urls, conn_catalog_product, conn_catalog_urls);
+            resolve()
+        } catch (err) {
+            console.log("---------------------------------------------------------------------ERROR OCCURS", err);
+            reject(err)
+        }
+    };
+})
+const scrapLowesProduct = ({ url: href }, website, conn_catalog_product, conn_catalog_urls) => new Promise(async (resolve, reject) => {
+    console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url  :: " + href);
+    if (!href.includes(website)) { resolve(); } else {
+        try {
+            if (!pagesToScrape) {
+                var pagesToScrape = 1;
+            }
+            const browser = await puppeteer.launch({ headless: true });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1480, height: 800 })
+            await page.evaluateOnNewDocument(() => {
+                Object.defineProperty(navigator, 'platform', { get: () => 'Win32' })
+                Object.defineProperty(navigator, 'productSub', { get: () => '20100101' })
+                Object.defineProperty(navigator, 'vendor', { get: () => '' })
+                Object.defineProperty(navigator, 'oscpu', { get: () => 'Windows NT 10.0;Win64;x64' })
+                Object.defineProperty(navigator, 'webdriver', { get: () => false, });
+            });
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64;rv:73.0) Gecko/20100101 Firefox/73.0');
+            var urls = [];
+            await page.goto(href, { waitUntil: 'load', timeout: 0 });
+
+            let currentPage = 1;
+            console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url Response");
+            await page.waitForSelector("#headerApp > div > div > header > div > div > div > div > a", { timeout: 0 });
+            await page.waitForTimeout(5000);
+            const scrollStep = 250;
+            const scrollDelay = 100;
+            const lastPosition = await scrollPageToBottom(page, scrollStep, scrollDelay);
+             await page.waitForTimeout(5000);
+            while (currentPage <= pagesToScrape) {
+                var results = [];
+                const url = await scrap();
+
+                function scrap() {
+                    var promise = new Promise(async (resolve, reject) => {
+                        const content = await page.content();
+                        const $ = cheerio.load(content);
+                        // if ($('#div.splc').length != 0) {
+                        const srct = $("div.splc > div.ru7jno-0.jHJUqJ > div > div.pl > div > div > div") || $("div.splc > div> div> div > div");
                         srct.each(function(i, element) {
-                            const rank = $(this).find('a').attr('href');
-                            const rank1 = $(this).find('a  img').attr('src');
-                            const rank2 = $(this).find('div.sr-content-box > a > p').text();
-                            const rank3 = $(this).find('div>div.money>p>span').text().replace(/\s+/, "").replace(/\n/g, "").trim();
-                            const rank4 = $(this).find('.product-pod--padding > div > a > div > span').text() || $(this).find('div>a:nth-child(2)').text();
-                            const rank7 = $(this).find('.product-pod--padding > div.product-pod__title > p > span').text() || $(this).find('a > div > h2 > span:nth-child(1)').text() || $(this).find(' div> a> span.pod-plp__brand-name').text();
-                            const productId = $(this).find('div.sr-content-box> p>a').text().replace("Part #:", "").trim();
+                            const rank = ('https://www.lowes.com').concat($(this).find('a').attr('href'));
+                            const rank1 = $(this).find('article img').attr('src');
+                            const rank2 = $(this).find('a>span>article').text();
+                            const rank3 = $(this).find(" article>div>div:nth-child(1)>div").text();
+                            const rank4 = $(this).find('ol>span').text();
+                            const rank7 = $(this).find('article > div > a > span > article > span > span').text();
+                            const Itemno = $(this).find('.tooltip-custom').first().text().slice(4)
+                            const Modelno = $(this).find('.tooltip-custom').last().text().slice(5)
+
                             results.push({
                                 descrip: rank2,
                                 href: rank,
@@ -72,150 +279,53 @@ const scrapFergusonProduct = ({ url: href }, website, conn_catalog_product, conn
                                 price: rank3,
                                 rating: rank4,
                                 brand: rank7,
-                                productId
+                                productId:Itemno
+
                             });
                         });
-                    }
-                    resolve(results);
-                });
-                return promise;
-            };
-            products = products.concat(url);
-            console.log(products.length);
 
-            console.log("page scrapped:" + currentPage + "/" + pagesToScrape);
-            if (currentPage <= pagesToScrape) {
-                await Promise.all([
-                    await page.waitForSelector("#wrapper > main > div > div > div > div > div > div> div > div.rc-fg-page-select > a", { waitUntil: 'load' }),
-                    await page.click("#wrapper > main > div > div > div > div > div > div> div > div.rc-fg-page-select > a:last-child"),
-                    await page.waitForTimeout(10000),
-                ]);
-            } else {
-                console.log(products.length);
+
+                        resolve(results);
+                    });
+                    return promise;
+                };
+                urls = urls.concat(url);
+                var pageScrap = [];
+                var sdtc = await page.$$eval('ul[data-selector=splp-pag-lst]>li', li => li.map(li => li.innerText));
+                for (const sdt of sdtc) {
+                    if (isNaN(sdt)) {
+                        pageScrap.push(1);
+                    } else { pageScrap.push(sdt); }
+                };
+                if (pageScrap.length != 0) {
+                    var max = pageScrap.reduce(function(a, b) {
+                        return Math.max(a, b)
+                    });
+                } else {
+                    max = 1;
+                }
+                console.log("page scrapped:" + currentPage + "/" + max);
+                if (currentPage < max) {
+                    await Promise.all([
+                        await page.waitForSelector('ul[data-selector=splp-pag-lst] > li:last-child', { waitUntil: 'load' }),
+                        await page.click("ul[data-selector=splp-pag-lst]> li:last-child"),
+                        await page.waitForTimeout(10000),
+                        pagesToScrape++,
+                    ]);
+                } else {
+                    console.log(urls.length);
+                }
+                currentPage++;
             }
-            currentPage++;
+            await browser.close();
+            await insertProduct(urls, conn_catalog_product, conn_catalog_urls);
+            resolve()
+        } catch (err) {
+            console.log("---------------------------------------------------------------------ERROR OCCURS", err);
+            reject(err)
         }
-        await browser.close();
-        console.log("-------------", products.length)
-        await insertProduct(products, conn_catalog_product, conn_catalog_urls);
-        resolve()
-    } catch (err) {
-        console.log("---------------------------------------------------------------------ERROR OCCURS", err);
-        scrapFergusonProduct({ url: href }, website, conn_catalog_product, conn_catalog_urls)
-    }
-})
-
-const scrapHomeDepotProduct = ({ url: href }, website, conn_catalog_product, conn_catalog_urls) => new Promise(async (resolve, reject) => {
-    console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url  :: " + href);
-    try {
-        if (!pagesToScrape) {
-            var pagesToScrape = 1;
-        }
-
-        const browser = await puppeteer.launch({  ignoreDefaultArgs: ['--disable-extensions'] });
-        const page = await browser.newPage();
-        var urls = [];
-        await page.goto(href, { waitUntil: 'load', timeout: 0 });
-        await page.waitForTimeout(5000);
-        let currentPage = 1;
-        console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url Response");
-
-        while (currentPage <= pagesToScrape) {
-            var results = [];
-            const url = await scrap();
-
-            function scrap() {
-                var promise = new Promise(async (resolve, reject) => {
-                    const content = await page.content();
-                    const $ = cheerio.load(content);
-                    if ($('#products').length != 0) {
-                        const srct = $('#products > div > div > div');
-                        srct.each(function(i, element) {
-                            const rank = $(this).find('a').attr('href');
-                            const rank1 = $(this).find('a  img').attr('src');
-                            const rank2 = $(this).find('div.pod-plp__description.js-podclick-analytics  > a').clone().children().remove().end().text().replace(/\s+/, "").replace(/\t/g, "").replace(/\n/g, "").trim();
-                            const rank3 = $(this).find(" .price__wrapper > div > div.if__overflow > div > div.price__numbers").clone().children().remove().end().text().replace(/\s+/, "").replace(/\n/g, "").trim();
-                            const rank5 = $(this).find("div.price__wrapper > div > div.if__overflow> div > div.price__numbers > span:nth-child(2)").text();
-                            const rank6 = ("$").concat(rank3).concat('.').concat(rank5);
-                            const rank4 = $(this).find('.product-pod--padding > div > a > div > span').text() || $(this).find('div>a:nth-child(2)').text();
-                            const rank7 = $(this).find('.product-pod--padding > div.product-pod__title > p > span').text() || $(this).find('a > div > h2 > span:nth-child(1)').text() || $(this).find(' div> a> span.pod-plp__brand-name').text();
-                            const productId = $(this).find('meta[data-prop=productID]').attr("content");
-                            results.push({
-                                descrip: rank2,
-                                href: rank,
-                                src: rank1,
-                                price: rank6,
-                                rating: rank4,
-                                brand: rank7,
-                                productId
-                            });
-                        });
-                    } else {
-                        const srct = $('.results-wrapped > div > div > div');
-                        srct.each(function(i, element) {
-                            const rank = $(this).find('a').attr('href');
-                            const rank1 = $(this).find('a  img').attr('src');
-                            const rank2 = $(this).find('.product-pod--padding > div > a > div > h2 > span').text()
-                            const rank3 = $(this).find('#standard-price > div > div > span:nth-child(2)').text() || $(this).find('.product-pod--padding > div.price__wrapper > div > div.price > div > span:nth-child(2)').text() || $(this).find('#was-price > div > div > span:nth-child(2)').text() || ($(this).find('#range-price > div:nth-child(1) > div:nth-child(1) > div > span:nth-child(2)').text()).concat('-').concat($(this).find('#range-price > div:nth-child(1) > div:nth-child(3) > div > span:nth-child(2)').text());
-                            const rank5 = $(this).find('#standard-price > div > div > span:nth-child(3)').text() || $(this).find('.product-pod--padding > div.price__wrapper > div > div.price > div > span:nth-child(3)').text()
-                            const rank6 = ("$").concat(rank3).concat('.').concat(rank5);
-                            const rank4 = $(this).find('.product-pod--padding > div > a > div > span').text() || $(this).find('div>a:nth-child(2)').text();
-                            const rank7 = $(this).find('.product-pod--padding > div.product-pod__title > p > span').text() || $(this).find('a > div > h2 > span:nth-child(1)').text() || $(this).find(' div> a> span.pod-plp__brand-name').text();
-                            const productId = $(this).find('meta[data-prop=productID]').attr("content");
-                            results.push({
-                                descrip: rank2,
-                                href: rank,
-                                src: rank1,
-                                price: rank6,
-                                rating: rank4,
-                                brand: rank7,
-                                productId
-                            });
-                        });
-                    }
-                    console.log(results.length)
-                    resolve(results);
-                });
-                return promise;
-            };
-            urls = urls.concat(url);
-            var pageScrap = [];
-            var sdtc = await page.$$('nav.hd-pagination > ul > li');
-            for (const sdt of sdtc) {
-                const $value = await sdt.$eval('button,span,a', button => button.innerText);
-                if (isNaN($value)) {
-                    pageScrap.push(1);
-                } else { pageScrap.push($value); }
-            };
-            console.log(pageScrap.length);
-            if (pageScrap.length != 0) {
-                var max = pageScrap.reduce(function(a, b) {
-                    return Math.max(a, b)
-                });
-            } else {
-                max = 1;
-            }
-            console.log("page scrapped:" + currentPage + "/" + max);
-            if (currentPage < max) {
-                await Promise.all([await page.waitForSelector('nav.hd-pagination > ul > li:last-child > a,button', { waitUntil: 'load' }),
-                    await page.click("nav.hd-pagination > ul > li:last-child"),
-                    await page.waitForTimeout(10000),
-                    pagesToScrape++,
-                ]);
-            } else {
-                console.log(urls.length);
-            }
-            currentPage++;
-        }
-        await browser.close();
-        await insertProduct(urls, conn_catalog_product, conn_catalog_urls);
-        console.log("-------------", urls.length)
-        resolve()
-    } catch (err) {
-        console.log("---------------------------------------------------------------------ERROR OCCURS", err);
-        reject(err)
-    }
-})
+    };
+});
 
 
 const createConnection = () => new Promise((resolve, reject) => {
@@ -253,6 +363,7 @@ const callFetchProduct = (catalog_url_data, website, conn_catalog_product, conn_
 
         if (website == "homedepot") await scrapHomeDepotProduct(currentUrl[0], website, conn_catalog_product, conn_catalog_urls);
         else if (website == "ferguson") await scrapFergusonProduct(currentUrl[0], website, conn_catalog_product, conn_catalog_urls);
+        else if (website == "lowes") await scrapLowesProduct(currentUrl[0], website, conn_catalog_product, conn_catalog_urls);
 
         if (pendingUrls.length > 0) {
             callFetchProduct(pendingUrls, website, conn_catalog_product, conn_catalog_urls);
@@ -285,7 +396,7 @@ const start = (website) => new Promise(async (resolve, reject) => {
 
 
 //*******************************************************************************************************
-var master_website_list = ['homedepot', 'ferguson'];
+var master_website_list = ['homedepot', 'ferguson', 'lowes'];
 var MASTER_WEBSITE = false;
 var args = process.argv.slice(2);
 if (args.length == 0) {
