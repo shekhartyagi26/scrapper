@@ -29,7 +29,7 @@ const scrapFergusonProduct = ({ url: href }, website, conn_catalog_product, conn
         if (!pagesToScrape) {
             var pagesToScrape = 1;
         }
-        const browser = await puppeteer.launch({  ignoreDefaultArgs: ['--disable-extensions'], executablePath: '/usr/bin/google-chrome-stable' /*headless: false*/ });
+        const browser = await puppeteer.launch({ ignoreDefaultArgs: ['--disable-extensions'], executablePath: '/usr/bin/google-chrome-stable' /*headless: false*/ });
         const page = await browser.newPage();
         var products = [];
         await page.goto(href, { waitUntil: 'load', timeout: 0, visible: true });
@@ -71,7 +71,8 @@ const scrapFergusonProduct = ({ url: href }, website, conn_catalog_product, conn
                                 price: rank3,
                                 rating: rank4,
                                 brand: rank7,
-                                productId
+                                productId,
+                                supplier: "ferguson"
                             });
                         });
                     }
@@ -145,12 +146,13 @@ const scrapHomeDepotProduct = ({ url: href }, website, conn_catalog_product, con
                             const productId = $(this).find('meta[data-prop=productID]').attr("content");
                             results.push({
                                 descrip: rank2,
-                                href: rank,
+                                href: "https://www.homedepot.com" + rank,
                                 src: rank1,
                                 price: rank6,
                                 rating: rank4,
                                 brand: rank7,
-                                productId
+                                productId,
+                                supplier: "homedepot"
                             });
                         });
                     } else {
@@ -167,16 +169,16 @@ const scrapHomeDepotProduct = ({ url: href }, website, conn_catalog_product, con
                             const productId = $(this).find('meta[data-prop=productID]').attr("content");
                             results.push({
                                 descrip: rank2,
-                                href: rank,
+                                href: "https://www.homedepot.com" + rank,
                                 src: rank1,
                                 price: rank6,
                                 rating: rank4,
                                 brand: rank7,
-                                productId
+                                productId,
+                                supplier: "homedepot"
                             });
                         });
                     }
-                    console.log(results.length)
                     resolve(results);
                 });
                 return promise;
