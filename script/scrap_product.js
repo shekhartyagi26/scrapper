@@ -30,10 +30,19 @@ const scrapFergusonProduct = ({ url: href }, website, conn_catalog_product, conn
             var pagesToScrape = 1;
         }
         const browser = await puppeteer.launch({ ignoreDefaultArgs: ['--disable-extensions'], executablePath: '/usr/bin/google-chrome-stable' /*headless: false*/ });
-        const page = await browser.newPage();
-        var products = [];
-        await page.goto(href, { waitUntil: 'load', timeout: 0, visible: true });
-        await page.waitForTimeout(5000);
+        // const page = await browser.newPage();
+        // var products = [];
+        // await page.goto(href, { waitUntil: 'load', timeout: 0, visible: true });
+        // await page.waitForTimeout(5000);
+
+         // const browser = await puppeteer.launch({ headless: true });
+            const page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36');
+            var products = [];
+            await page.goto(href, { waitUntil: 'load', timeout: 0 });
+
+        await page.waitForTimeout(10000);
+        
         let currentPage = 1;
 
         console.log("---------------------------------------------------------------------STEP :: Analysing Catalog Url Response");
